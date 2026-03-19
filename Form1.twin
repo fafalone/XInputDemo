@@ -1,0 +1,165 @@
+[Description("")]
+[FormDesignerId("8C0B74A8-4DC9-4BB3-8F15-F5E4DD08201D")]
+[PredeclaredId]
+Class Form1
+ 
+    Private Const POLL_INTERVAL As Long = 16
+    Private bVibe As Boolean
+    Private bWin7 As Boolean 'use old APIs
+    
+    Private Sub Form_Load()
+        Timer1.Interval = POLL_INTERVAL
+        Timer1.Enabled = True
+        bWin7 = (IsWindows8OrGreater() = False)
+        Dim cap As XINPUT_CAPABILITIES
+        Dim bat As XINPUT_BATTERY_INFORMATION
+        If bWin7 = False Then
+            XInputGetCapabilities(0, XINPUT_FLAG_GAMEPAD, cap)
+        Else
+            XInputGetCapabilities7(0, XINPUT_FLAG_GAMEPAD, cap)
+        End If
+        If IsWindows10OrGreater() Then
+            XInputGetBatteryInformation(0, BATTERY_DEVTYPE_GAMEPAD, bat)
+            If bat.BatteryType <> BATTERY_TYPE_WIRED Then
+                Select Case bat.BatteryLevel
+                    Case BATTERY_LEVEL_FULL: Label4.Caption = "Battery level: Full"
+                    Case BATTERY_LEVEL_MEDIUM: Label4.Caption = "Battery level: Medium"
+                    Case BATTERY_LEVEL_LOW: Label4.Caption = "Battery level: Low"
+                    Case BATTERY_LEVEL_EMPTY: Label4.Caption = "Battery level: Empty"
+                End Select
+            Else
+                Label4.Caption = "Battery level: Wired controller; no battery."
+            End If
+        Else
+            Label4.Caption = "Battery level: (Battery info requires Win10+)"
+        End If
+        If (CIntToUInt(cap.Vibration.wLeftMotorSpeed) + CIntToUInt(cap.Vibration.wRightMotorSpeed)) > 0 Then
+            bVibe = True
+            Label3.Caption = "Controller supports vibration. Triggers will activate it."
+        Else
+            Label3.Caption = "Controller does not support vibration."
+        End If
+    End Sub
+
+    Private Sub Form_Unload(Cancel As Integer)
+        Timer1.Enabled = False
+    End Sub
+
+    Private Sub Timer1_Timer()
+        Dim state As XINPUT_STATE
+        
+        If bWin7 = False Then
+            If XInputGetState(0, state) <> ERROR_SUCCESS Then
+                ResetAllShapes
+                Exit Sub
+            End If
+        Else
+            If XInputGetState7(0, state) <> ERROR_SUCCESS Then
+                ResetAllShapes
+                Exit Sub
+            End If
+        End If
+        
+        Dim buttons As Integer
+        buttons = state.Gamepad.wButtons
+    
+        ' D-pad 
+        Shape1.FillColor = IIf(buttons And XINPUT_GAMEPAD_DPAD_UP, vbRed, vbWhite)
+        Shape2.FillColor = IIf(buttons And XINPUT_GAMEPAD_DPAD_LEFT, vbRed, vbWhite)
+        Shape3.FillColor = IIf(buttons And XINPUT_GAMEPAD_DPAD_RIGHT, vbRed, vbWhite)
+        Shape4.FillColor = IIf(buttons And XINPUT_GAMEPAD_DPAD_DOWN, vbRed, vbWhite)
+    
+        ' Face buttons (5=Y, 6=X, 7=B, 8=A)
+        Shape5.FillColor = IIf(buttons And XINPUT_GAMEPAD_Y, vbRed, vbWhite)
+        Shape6.FillColor = IIf(buttons And XINPUT_GAMEPAD_X, vbRed, vbWhite)
+        Shape7.FillColor = IIf(buttons And XINPUT_GAMEPAD_B, vbRed, vbWhite)
+        Shape8.FillColor = IIf(buttons And XINPUT_GAMEPAD_A, vbRed, vbWhite)
+        
+        Shape9.FillColor = IIf(buttons And XINPUT_GAMEPAD_START, vbRed, vbWhite)
+        Shape10.FillColor = IIf(buttons And XINPUT_GAMEPAD_BACK, vbRed, vbWhite)
+  
+        Shape11.FillColor = IIf(buttons And XINPUT_GAMEPAD_LEFT_SHOULDER, vbRed, vbWhite)
+        Shape12.FillColor = IIf(buttons And XINPUT_GAMEPAD_RIGHT_SHOULDER, vbRed, vbWhite)
+        
+        
+        DrawThumbstick Picture1, state.Gamepad.sThumbLX, state.Gamepad.sThumbLY, _
+                        CBool(buttons And XINPUT_GAMEPAD_LEFT_THUMB)
+        DrawThumbstick Picture2, state.Gamepad.sThumbRX, state.Gamepad.sThumbRY, _
+                        CBool(buttons And XINPUT_GAMEPAD_RIGHT_THUMB)
+        
+        DrawTrigger Picture3, state.Gamepad.bLeftTrigger
+        DrawTrigger Picture4, state.Gamepad.bRightTrigger
+        SetVibration state.Gamepad.bLeftTrigger, state.Gamepad.bRightTrigger
+        
+    End Sub
+
+    Private Sub ResetAllShapes()
+        Shape1.FillColor = vbWhite
+        Shape2.FillColor = vbWhite
+        Shape3.FillColor = vbWhite
+        Shape4.FillColor = vbWhite
+        Shape5.FillColor = vbWhite
+        Shape6.FillColor = vbWhite
+        Shape7.FillColor = vbWhite
+        Shape8.FillColor = vbWhite
+    End Sub
+    
+    Private Sub DrawThumbstick(pic As PictureBox, axisX As Integer, axisY As Integer, Optional pressed As Boolean = False)
+        Dim cx As Single, cy As Single, radius As Single, dotRadius As Single
+        Dim dotX As Single, dotY As Single
+    
+        cx = pic.ScaleWidth / 2
+        cy = pic.ScaleHeight / 2
+        radius = (pic.ScaleWidth / 2) - 8
+        dotRadius = radius / 5
+    
+        dotX = cx + (axisX / 32767) * (radius - dotRadius)
+        dotY = cy - (axisY / 32767) * (radius - dotRadius)
+    
+        pic.Cls
+    
+        pic.FillStyle = 1
+        pic.DrawWidth = 2
+        pic.Circle (cx, cy), radius, vbBlack
+    
+        pic.FillStyle = 0
+        pic.FillColor = IIf(pressed, vbRed, vbGreen)
+        pic.DrawWidth = 1
+        pic.Circle (dotX, dotY), dotRadius, pic.FillColor
+    End Sub
+    
+    Private Sub DrawTrigger(pic As PictureBox, value As Byte)
+        Dim fillWidth As Single
+    
+        pic.Cls
+    
+        ' Draw border
+        pic.FillStyle = 1  ' Transparent
+        pic.DrawWidth = 2
+        pic.Line (0, 0)-(pic.ScaleWidth - 1, pic.ScaleHeight - 1), vbBlack, B
+    
+        ' Draw fill proportional to trigger value (0-255)
+        fillWidth = (value / 255) * (pic.ScaleWidth - 4)
+    
+        If fillWidth > 0 Then
+            pic.FillStyle = 0  ' Solid
+            pic.FillColor = vbGreen
+            pic.Line (2, 2)-(2 + fillWidth, pic.ScaleHeight - 3), vbGreen, BF
+        End If
+    End Sub
+    
+    Private Sub SetVibration(leftTrigger As Byte, rightTrigger As Byte)
+        Dim vibration As XINPUT_VIBRATION
+    
+        ' Scale 0-255 trigger range up to 0-65535 motor range
+        vibration.wLeftMotorSpeed = CUIntToInt(CLng(leftTrigger) * 257&)
+        vibration.wRightMotorSpeed = CUIntToInt(CLng(rightTrigger) * 257&)
+    
+        If bWin7 = False Then
+            XInputSetState 0, vibration
+        Else
+            XInputSetState7 0, vibration
+        End If
+    End Sub
+    
+End Class
